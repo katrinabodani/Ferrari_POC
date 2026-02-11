@@ -6,8 +6,6 @@
 
 #### NeurIPS 2024
 
-[![Paper](https://img.shields.io/badge/cs.CV-arxiv:2312.05849-B31B1B.svg)]((https://arxiv.org/abs/2405.17462))
-
 #### (Released on October 08, 2024)
 
 ## Introduction
