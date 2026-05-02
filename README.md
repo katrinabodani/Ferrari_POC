@@ -2,6 +2,8 @@
 
 [NeurIPS 2024](https://neurips.cc/virtual/2024/poster/94662) | [ArXiv](https://arxiv.org/abs/2405.17462) | [Supplementary Material](https://github.com/OngWinKent/Federated-Feature-Unlearning/tree/main/supplementary) | [Poster](https://github.com/OngWinKent/Federated-Feature-Unlearning/blob/main/supplementary/Poster.pdf)
 
+### Please note that is the work of Win Kent Ong and Chee Sang Chan et al, We give full credit to them hence their commit history has been preserved, we have just built a dashboard on top to show the reproduction of the paper "Ferrari: Federated Feature Unlearning via Optimizing Feature Sensitivity" by the said authors.
+
 ### Official pytorch implementation of the paper: "Ferrari: Federated Feature Unlearning via Optimizing Feature Sensitivity"
 
 #### NeurIPS 2024
