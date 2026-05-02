@@ -1,4 +1,4 @@
-# Ferrari: Federated Feature Unlearning — Proof of Concept
+# Ferrari: Federated Feature Unlearning: Proof of Concept
 
 > **NeurIPS 2024** | Responsible & Explainable AI | FAST NUCES Islamabad | Spring 2026
 > Katrina Bodani (22i0545, AI-8A) & Syed Zain Abbas Zaidi (22i1905, DS-8A)
