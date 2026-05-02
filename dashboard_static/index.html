@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ferrari — Federated Feature Unlearning</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0a0a0f;--surface:#111118;--surface2:#1a1a24;--border:#2a2a3a;
+    --accent:#e8173a;--accent2:#ff6b35;--gold:#f5c842;--green:#00e5a0;
+    --text:#f0f0f8;--muted:#6b6b88;
+    --font-head:'Syne',sans-serif;--font-mono:'Space Mono',monospace;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+  body{background:var(--bg);color:var(--text);font-family:var(--font-mono);min-height:100vh;overflow-x:hidden;}
+  body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(232,23,58,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(232,23,58,0.04) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0;}
+
+  header{position:relative;z-index:10;padding:1.5rem 3rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:linear-gradient(180deg,rgba(232,23,58,0.06) 0%,transparent 100%);}
+  .logo{display:flex;align-items:baseline;gap:.75rem;}
+  .logo-text{font-family:var(--font-head);font-size:1.8rem;font-weight:800;letter-spacing:-.02em;background:linear-gradient(135deg,var(--accent) 0%,var(--accent2) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+  .logo-sub{font-size:.65rem;color:var(--muted);letter-spacing:.15em;text-transform:uppercase;}
+  .header-badge{display:flex;align-items:center;gap:.5rem;background:var(--surface2);border:1px solid var(--border);padding:.4rem 1rem;border-radius:2px;font-size:.7rem;letter-spacing:.1em;color:var(--muted);}
+  .dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 2s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(.8);}}
+
+  .tabs-bar{position:relative;z-index:10;display:flex;border-bottom:1px solid var(--border);background:var(--surface);padding:0 3rem;}
+  .tab-btn{padding:1rem 1.5rem;background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:var(--font-mono);font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;transition:all .2s;margin-bottom:-1px;}
+  .tab-btn:hover{color:var(--text);}
+  .tab-btn.active{color:var(--text);border-bottom-color:var(--accent);}
+  .tab-badge{display:inline-block;margin-left:.5rem;padding:.1rem .4rem;font-size:.55rem;border-radius:2px;background:var(--surface2);border:1px solid var(--border);vertical-align:middle;}
+  .tab-btn.active .tab-badge{background:rgba(232,23,58,.15);border-color:rgba(232,23,58,.3);color:var(--accent);}
+
+  .tab-panel{display:none;}
+  .tab-panel.active{display:block;}
+
+  main{position:relative;z-index:10;max-width:1400px;margin:0 auto;padding:2.5rem 3rem 4rem;}
+
+  .hero{margin-bottom:2.5rem;}
+  .hero h1{font-family:var(--font-head);font-size:clamp(1.6rem,3.5vw,2.6rem);font-weight:800;line-height:1.1;letter-spacing:-.03em;margin-bottom:.6rem;}
+  .hero h1 .red{color:var(--accent);}
+  .hero h1 .grn{color:var(--green);}
+  .hero p{color:var(--muted);font-size:.75rem;letter-spacing:.04em;max-width:620px;line-height:1.7;}
+
+  .upload-section{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;margin-bottom:2rem;}
+  .upload-zone{border:1px dashed var(--border);background:var(--surface);padding:2rem;text-align:center;cursor:pointer;transition:all .2s;position:relative;overflow:hidden;}
+  .upload-zone::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(232,23,58,.03) 0%,transparent 60%);pointer-events:none;}
+  .upload-zone:hover{border-color:var(--accent);background:var(--surface2);}
+  .upload-zone.drag-over{border-color:var(--accent);background:rgba(232,23,58,.05);}
+  .upload-icon{font-size:2rem;margin-bottom:.8rem;display:block;}
+  .upload-zone h3{font-family:var(--font-head);font-weight:700;font-size:.95rem;margin-bottom:.4rem;}
+  .upload-zone p{font-size:.68rem;color:var(--muted);line-height:1.6;}
+  .uploaded-preview{display:none;text-align:center;margin-top:.8rem;}
+  .preview-img{width:70px;height:70px;image-rendering:pixelated;border:1px solid var(--border);display:block;margin:0 auto .4rem;}
+  .uploaded-preview p{font-size:.62rem;color:var(--green);letter-spacing:.1em;}
+
+  .info-panel{background:var(--surface);border:1px solid var(--border);padding:1.5rem;}
+  .info-panel h3{font-family:var(--font-head);font-size:.72rem;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:1.2rem;}
+  .step-list{display:flex;flex-direction:column;gap:.6rem;margin-bottom:1.5rem;}
+  .step-item{display:flex;align-items:flex-start;gap:.8rem;font-size:.7rem;}
+  .step-num{font-size:.9rem;flex-shrink:0;margin-top:-.05rem;}
+
+  .btn-analyze{width:100%;padding:1rem;background:var(--accent);color:white;border:none;font-family:var(--font-head);font-size:.9rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;transition:all .2s;position:relative;overflow:hidden;}
+  .btn-analyze::before{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.1),transparent);transition:left .4s;}
+  .btn-analyze:hover::before{left:100%;}
+  .btn-analyze:hover{background:#ff1f40;transform:translateY(-1px);}
+  .btn-analyze:disabled{background:var(--muted);cursor:not-allowed;transform:none;}
+
+  .loading-block{display:none;text-align:center;padding:3rem;color:var(--muted);}
+  .spinner{width:36px;height:36px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 1rem;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .results-block{display:none;animation:fadeIn .4s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
+
+  .section-label{font-size:.62rem;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin-bottom:1.2rem;display:flex;align-items:center;gap:1rem;}
+  .section-label::after{content:'';flex:1;height:1px;background:var(--border);}
+
+  .img-compare{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);margin-bottom:1.5rem;}
+  .img-panel{background:var(--surface);padding:1.2rem;display:flex;flex-direction:column;align-items:center;gap:.8rem;}
+  .img-panel-label{font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);align-self:flex-start;}
+  .img-panel img{width:112px;height:112px;image-rendering:pixelated;border:1px solid var(--border);}
+
+  .verdict{padding:1rem 1.5rem;margin-bottom:1.5rem;display:flex;align-items:center;gap:1rem;font-family:var(--font-head);font-weight:700;font-size:.95rem;}
+  .verdict.success{background:rgba(0,229,160,.08);border:1px solid rgba(0,229,160,.3);color:var(--green);}
+  .verdict.partial{background:rgba(245,200,66,.08);border:1px solid rgba(245,200,66,.3);color:var(--gold);}
+  .verdict-icon{font-size:1.3rem;}
+
+  .results-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);margin-bottom:2rem;}
+  .result-card{background:var(--surface);padding:1.3rem;}
+  .result-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;padding-bottom:.7rem;border-bottom:1px solid var(--border);}
+  .model-tag{font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;padding:.2rem .5rem;border-radius:2px;}
+  .model-tag.baseline{background:rgba(232,23,58,.1);color:var(--accent);border:1px solid rgba(232,23,58,.3);}
+  .model-tag.unlearned{background:rgba(0,229,160,.1);color:var(--green);border:1px solid rgba(0,229,160,.3);}
+  .input-tag{font-size:.58rem;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;}
+  .pred-label{font-family:var(--font-head);font-size:2.2rem;font-weight:800;line-height:1;margin-bottom:.25rem;}
+  .pred-label.danger{color:var(--accent);}
+  .pred-label.safe{color:var(--green);}
+  .pred-label.normal{color:var(--text);}
+  .pred-conf{font-size:.68rem;color:var(--muted);margin-bottom:1rem;}
+  .conf-bars{display:flex;flex-direction:column;gap:.35rem;}
+  .conf-bar-row{display:flex;align-items:center;gap:.5rem;font-size:.62rem;}
+  .conf-bar-label{width:20px;color:var(--muted);text-align:right;flex-shrink:0;}
+  .conf-bar-track{flex:1;height:4px;background:var(--border);border-radius:2px;overflow:hidden;}
+  .conf-bar-fill{height:100%;border-radius:2px;transition:width .6s cubic-bezier(.4,0,.2,1);}
+  .conf-bar-fill.red{background:var(--accent);}
+  .conf-bar-fill.green{background:var(--green);}
+  .conf-bar-fill.muted{background:var(--muted);}
+  .conf-bar-val{width:38px;text-align:right;color:var(--muted);flex-shrink:0;}
+
+  footer{position:relative;z-index:10;border-top:1px solid var(--border);padding:1.2rem 3rem;display:flex;justify-content:space-between;align-items:center;font-size:.62rem;color:var(--muted);letter-spacing:.08em;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span class="logo-text">FERRARI</span>
+    <span class="logo-sub">Federated Feature Unlearning · NeurIPS 2024</span>
+  </div>
+  <div class="header-badge">
+    <div class="dot" id="statusDot"></div>
+    <span id="statusText">Connecting...</span>
+  </div>
+</header>
+
+<div class="tabs-bar">
+  <button class="tab-btn active" onclick="switchTab('backdoor',this)">Backdoor Unlearning<span class="tab-badge">MNIST</span></button>
+  <button class="tab-btn" onclick="switchTab('bias',this)">Bias Unlearning<span class="tab-badge">CMNIST</span></button>
+  <button class="tab-btn" onclick="switchTab('sensitive',this)">Sensitive Unlearning<span class="tab-badge">DIABETES</span></button>
+</div>
+
+<!-- ══ TAB 1 — BACKDOOR ══ -->
+<div class="tab-panel active" id="tab-backdoor">
+<main>
+  <div class="hero">
+    <h1>Backdoor <span class="red">Attack</span> Unlearning</h1>
+    <p>A federated client poisoned the global model with a hidden trigger pattern. Any image containing the trigger gets misclassified as digit 0. Ferrari surgically removes this backdoor without retraining.</p>
+  </div>
+  <div class="upload-section">
+    <div class="upload-zone" id="bdZone" onclick="document.getElementById('bdInput').click()">
+      <span class="upload-icon">⬆</span>
+      <h3>Upload Digit Image</h3>
+      <p>Upload any <strong>RAW_digit*.png</strong> from your <code>demo_candidates/</code> folder</p>
+      <div class="uploaded-preview" id="bdPreview"><img id="bdPreviewImg" class="preview-img" src="" alt=""><p>✓ IMAGE LOADED</p></div>
+      <input type="file" id="bdInput" accept="image/*" style="display:none">
+    </div>
+    <div class="info-panel">
+      <h3>// How it works</h3>
+      <div class="step-list">
+        <div class="step-item"><span class="step-num" style="color:var(--muted)">①</span><span style="color:var(--muted)">Clean image → both models classify correctly</span></div>
+        <div class="step-item"><span class="step-num" style="color:var(--accent)">②</span><span style="color:var(--muted)">Attacked image → <strong style="color:var(--accent)">baseline model is fooled</strong> → predicts digit 0</span></div>
+        <div class="step-item"><span class="step-num" style="color:var(--green)">③</span><span style="color:var(--muted)">Attacked image → <strong style="color:var(--green)">unlearned model stays correct</strong> → trigger ignored</span></div>
+      </div>
+      <button class="btn-analyze" id="bdBtn" onclick="analyzeBackdoor()" disabled>▶ ANALYZE UNLEARNING</button>
+    </div>
+  </div>
+  <div class="loading-block" id="bdLoading"><div class="spinner"></div><p style="font-size:.72rem;letter-spacing:.1em;">RUNNING INFERENCE...</p></div>
+  <div class="results-block" id="bdResults">
+    <div class="section-label">// Input Images</div>
+    <div class="img-compare">
+      <div class="img-panel"><span class="img-panel-label">Clean Input</span><img id="bdCleanImg" src="" alt="clean"></div>
+      <div class="img-panel"><span class="img-panel-label">⚡ Triggered Input</span><img id="bdTrigImg" src="" alt="triggered"></div>
+    </div>
+    <div class="verdict" id="bdVerdict"><span class="verdict-icon" id="bdVerdictIcon"></span><span id="bdVerdictText"></span></div>
+    <div class="section-label">// Model Predictions</div>
+    <div class="results-grid">
+      <div class="result-card">
+        <div class="result-card-header"><span class="model-tag baseline">BASELINE MODEL</span><span class="input-tag">Clean Input</span></div>
+        <div class="pred-label normal" id="bd_b_cl"></div><div class="pred-conf" id="bd_b_cl_c"></div><div class="conf-bars" id="bd_b_cl_b"></div>
+      </div>
+      <div class="result-card">
+        <div class="result-card-header"><span class="model-tag baseline">BASELINE MODEL</span><span class="input-tag">⚡ Triggered</span></div>
+        <div class="pred-label danger" id="bd_b_tr"></div><div class="pred-conf" id="bd_b_tr_c"></div><div class="conf-bars" id="bd_b_tr_b"></div>
+      </div>
+      <div class="result-card">
+        <div class="result-card-header"><span class="model-tag unlearned">UNLEARNED MODEL</span><span class="input-tag">Clean Input</span></div>
+        <div class="pred-label normal" id="bd_u_cl"></div><div class="pred-conf" id="bd_u_cl_c"></div><div class="conf-bars" id="bd_u_cl_b"></div>
+      </div>
+      <div class="result-card">
+        <div class="result-card-header"><span class="model-tag unlearned">UNLEARNED MODEL</span><span class="input-tag">⚡ Triggered</span></div>
+        <div class="pred-label safe" id="bd_u_tr"></div><div class="pred-conf" id="bd_u_tr_c"></div><div class="conf-bars" id="bd_u_tr_b"></div>
+      </div>
+    </div>
+  </div>
+</main>
+</div>
+
+<!-- ══ TAB 2 — BIAS ══ -->
+<div class="tab-panel" id="tab-bias">
+<main>
+  <div class="hero">
+    <h1>Color <span class="grn">Bias</span> Unlearning</h1>
+    <p>The model was trained on colored MNIST where digit 3 is always blue and digit 8 is always green. It learned to classify by color, not shape. Ferrari removes this color bias — restoring fair, shape-based classification.</p>
+  </div>
+  <div class="upload-section">
+    <div class="upload-zone" id="biasZone" onclick="document.getElementById('biasInput').click()">
+      <span class="upload-icon">⬆</span>
+      <h3>Upload Colored Digit Image</h3>
+      <p>Upload any <strong>BIAS_digit*.png</strong> from your <code>bias_demo/</code> folder</p>
+      <div class="uploaded-preview" id="biasPreview"><img id="biasPreviewImg" class="preview-img" src="" alt=""><p>✓ IMAGE LOADED</p></div>
+      <input type="file" id="biasInput" accept="image/*" style="display:none">
+    </div>
+    <div class="info-panel">
+      <h3>// How it works</h3>
+      <div class="step-list">
+        <div class="step-item"><span class="step-num" style="color:var(--muted)">①</span><span style="color:var(--muted)">Digit with correct training color → both models classify correctly</span></div>
+        <div class="step-item"><span class="step-num" style="color:var(--accent)">②</span><span style="color:var(--muted)">Digit with swapped color → <strong style="color:var(--accent)">baseline is fooled by color bias</strong></span></div>
+        <div class="step-item"><span class="step-num" style="color:var(--green)">③</span><span style="color:var(--muted)">Digit with swapped color → <strong style="color:var(--green)">unlearned model uses shape</strong> → correct</span></div>
+      </div>
+      <button class="btn-analyze" id="biasBtn" onclick="analyzeBias()" disabled>▶ ANALYZE UNLEARNING</button>
+    </div>
+  </div>
+  <div class="loading-block" id="biasLoading"><div class="spinner"></div><p style="font-size:.72rem;letter-spacing:.1em;">RUNNING INFERENCE...</p></div>
+  <div class="results-block" id="biasResults">
+    <div class="section-label">// Input Images</div>
+    <div class="img-compare">
+      <div class="img-panel"><span class="img-panel-label">Correct Color</span><img id="biasCorrectImg" src="" alt="correct"></div>
+      <div class="img-panel"><span class="img-panel-label">🎨 Color-Swapped (bias probe)</span><img id="biasSwappedImg" src="" alt="swapped"></div>
+    </div>
+    <div class="verdict" id="biasVerdict"><span class="verdict-icon" id="biasVerdictIcon"></span><span id="biasVerdictText"></span></div>
+    <div class="section-label">// Model Predictions</div>
+    <div class="results-grid">
+      <div class="result-card">
+        <div class="result-card-header"><span class="model-tag baseline">BASELINE MODEL</span><span class="input-tag">Correct Color</span></div>
+        <div class="pred-label normal" id="bi_b_co"></div><div class="pred-conf" id="bi_b_co_c"></div><div class="conf-bars" id="bi_b_co_b"></div>
+      </div>
+      <div class="result-card">
+        <div class="result-card-header"><span class="model-tag baseline">BASELINE MODEL</span><span class="input-tag">🎨 Color-Swapped</span></div>
+        <div class="pred-label danger" id="bi_b_sw"></div><div class="pred-conf" id="bi_b_sw_c"></div><div class="conf-bars" id="bi_b_sw_b"></div>
+      </div>
+      <div class="result-card">
+        <div class="result-card-header"><span class="model-tag unlearned">UNLEARNED MODEL</span><span class="input-tag">Correct Color</span></div>
+        <div class="pred-label normal" id="bi_u_co"></div><div class="pred-conf" id="bi_u_co_c"></div><div class="conf-bars" id="bi_u_co_b"></div>
+      </div>
+      <div class="result-card">
+        <div class="result-card-header"><span class="model-tag unlearned">UNLEARNED MODEL</span><span class="input-tag">🎨 Color-Swapped</span></div>
+        <div class="pred-label safe" id="bi_u_sw"></div><div class="pred-conf" id="bi_u_sw_c"></div><div class="conf-bars" id="bi_u_sw_b"></div>
+      </div>
+    </div>
+  </div>
+</main>
+</div>
+
+
+<!-- ══ TAB 3 — SENSITIVE ══ -->
+<div class="tab-panel" id="tab-sensitive">
+<main>
+  <div class="hero">
+    <h1>Sensitive Feature <span class="red">Unlearning</span></h1>
+    <p>A federated client trained the model on medical data containing a sensitive feature (Pregnancies). The model learned to rely on this private attribute. Ferrari makes the model insensitive to it — predictions no longer change when the sensitive feature is perturbed.</p>
+  </div>
+  <div class="upload-section">
+    <div class="info-panel" style="grid-column:1/-1;">
+      <h3>// Patient Health Record</h3>
+      <p style="font-size:.7rem;color:var(--muted);line-height:1.7;margin-bottom:1.5rem;">
+        Enter a patient's health record below. The dashboard will run both models on the original record,
+        then perturb the <strong style="color:var(--accent)">sensitive feature (Pregnancies)</strong> and show
+        how each model responds. The baseline model changes its prediction — the unlearned model stays consistent.
+      </p>
+      <!-- Patient presets dropdown -->
+      <div style="margin-bottom:1rem;">
+        <label style="font-size:.62rem;color:var(--muted);letter-spacing:.1em;display:block;margin-bottom:.4rem;">LOAD PATIENT RECORD</label>
+        <select id="patientPreset" onchange="loadPreset()" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.6rem;font-family:var(--font-mono);font-size:.75rem;cursor:pointer;">
+          <option value="">— Select a patient record —</option>
+          <option value="1">Patient 1</option>
+          <option value="2">Patient 2</option>
+          <option value="3">Patient 3</option>
+        </select>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.5rem;" id="sensitiveInputs">
+        <div>
+          <label style="font-size:.62rem;color:var(--muted);letter-spacing:.1em;display:block;margin-bottom:.4rem;">GLUCOSE</label>
+          <input type="number" id="s_gluc" value="148" min="0" max="300" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.5rem;font-family:var(--font-mono);font-size:.8rem;">
+        </div>
+        <div>
+          <label style="font-size:.62rem;color:var(--accent);letter-spacing:.1em;display:block;margin-bottom:.4rem;">PREGNANCIES ⚡ SENSITIVE</label>
+          <input type="number" id="s_preg" value="6" min="0" max="300" style="width:100%;background:var(--surface2);border:1px solid var(--accent);color:var(--text);padding:.5rem;font-family:var(--font-mono);font-size:.8rem;">
+        </div>
+        <div>
+          <label style="font-size:.62rem;color:var(--muted);letter-spacing:.1em;display:block;margin-bottom:.4rem;">BLOOD PRESSURE</label>
+          <input type="number" id="s_bp" value="72" min="0" max="200" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.5rem;font-family:var(--font-mono);font-size:.8rem;">
+        </div>
+        <div>
+          <label style="font-size:.62rem;color:var(--muted);letter-spacing:.1em;display:block;margin-bottom:.4rem;">SKIN THICKNESS</label>
+          <input type="number" id="s_skin" value="35" min="0" max="100" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.5rem;font-family:var(--font-mono);font-size:.8rem;">
+        </div>
+        <div>
+          <label style="font-size:.62rem;color:var(--muted);letter-spacing:.1em;display:block;margin-bottom:.4rem;">INSULIN</label>
+          <input type="number" id="s_ins" value="0" min="0" max="900" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.5rem;font-family:var(--font-mono);font-size:.8rem;">
+        </div>
+        <div>
+          <label style="font-size:.62rem;color:var(--muted);letter-spacing:.1em;display:block;margin-bottom:.4rem;">BMI</label>
+          <input type="number" id="s_bmi" value="33.6" min="0" max="70" step="0.1" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.5rem;font-family:var(--font-mono);font-size:.8rem;">
+        </div>
+        <div>
+          <label style="font-size:.62rem;color:var(--muted);letter-spacing:.1em;display:block;margin-bottom:.4rem;">DIABETES PEDIGREE</label>
+          <input type="number" id="s_dpf" value="0.627" min="0" max="3" step="0.001" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.5rem;font-family:var(--font-mono);font-size:.8rem;">
+        </div>
+        <div>
+          <label style="font-size:.62rem;color:var(--muted);letter-spacing:.1em;display:block;margin-bottom:.4rem;">AGE</label>
+          <input type="number" id="s_age" value="50" min="0" max="120" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:.5rem;font-family:var(--font-mono);font-size:.8rem;">
+        </div>
+      </div>
+      <button class="btn-analyze" id="sensBtn" onclick="analyzeSensitive()">▶ ANALYZE UNLEARNING</button>
+    </div>
+  </div>
+
+  <div class="loading-block" id="sensLoading"><div class="spinner"></div><p style="font-size:.72rem;letter-spacing:.1em;">RUNNING INFERENCE...</p></div>
+
+  <div class="results-block" id="sensResults">
+    <div class="verdict" id="sensVerdict"><span class="verdict-icon" id="sensVerdictIcon"></span><span id="sensVerdictText"></span></div>
+    <div class="section-label">// Model Predictions</div>
+    <div class="results-grid">
+      <div class="result-card">
+        <div class="result-card-header"><span class="model-tag baseline">BASELINE MODEL</span><span class="input-tag">Original Record</span></div>
+        <div class="pred-label normal" id="se_b_or"></div><div class="pred-conf" id="se_b_or_c"></div>
+        <div class="conf-bars" id="se_b_or_b"></div>
+      </div>
+      <div class="result-card">
+        <div class="result-card-header"><span class="model-tag baseline">BASELINE MODEL</span><span class="input-tag">⚡ Pregnancies Perturbed</span></div>
+        <div class="pred-label danger" id="se_b_pe"></div><div class="pred-conf" id="se_b_pe_c"></div>
+        <div class="conf-bars" id="se_b_pe_b"></div>
+      </div>
+      <div class="result-card">
+        <div class="result-card-header"><span class="model-tag unlearned">UNLEARNED MODEL</span><span class="input-tag">Original Record</span></div>
+        <div class="pred-label normal" id="se_u_or"></div><div class="pred-conf" id="se_u_or_c"></div>
+        <div class="conf-bars" id="se_u_or_b"></div>
+      </div>
+      <div class="result-card">
+        <div class="result-card-header"><span class="model-tag unlearned">UNLEARNED MODEL</span><span class="input-tag">⚡ Pregnancies Perturbed</span></div>
+        <div class="pred-label safe" id="se_u_pe"></div><div class="pred-conf" id="se_u_pe_c"></div>
+        <div class="conf-bars" id="se_u_pe_b"></div>
+      </div>
+    </div>
+  </div>
+</main>
+</div>
+
+<footer>
+  <span>Ferrari · Gu et al. · NeurIPS 2024 · Responsible AI Project · FAST NUCES Islamabad</span>
+  <span id="deviceInfo">Device: —</span>
+</footer>
+
+<script>
+function switchTab(name,btn){
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  btn.classList.add('active');
+}
+
+async function checkStatus(){
+  try{
+    const r=await fetch('/api/status');const d=await r.json();
+    const ok=d.baseline_loaded&&d.unlearn_loaded;
+    document.getElementById('statusDot').style.background=ok?'var(--green)':'var(--gold)';
+    document.getElementById('statusDot').style.boxShadow=ok?'0 0 8px var(--green)':'0 0 8px var(--gold)';
+    document.getElementById('statusText').textContent=ok?'Models loaded · '+d.device.toUpperCase():'Model files missing';
+    document.getElementById('deviceInfo').textContent='Device: '+d.device.toUpperCase();
+  }catch(e){document.getElementById('statusText').textContent='Server offline';}
+}
+checkStatus();
+
+function setupUpload(inputId,zoneId,previewId,previewImgId,btnId){
+  const inp=document.getElementById(inputId),zone=document.getElementById(zoneId);
+  inp.addEventListener('change',e=>{if(e.target.files[0])showPreview(e.target.files[0],previewId,previewImgId,btnId);});
+  zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag-over');});
+  zone.addEventListener('dragleave',()=>zone.classList.remove('drag-over'));
+  zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('drag-over');const f=e.dataTransfer.files[0];if(f){inp.files=e.dataTransfer.files;showPreview(f,previewId,previewImgId,btnId);}});
+}
+function showPreview(file,previewId,previewImgId,btnId){
+  const r=new FileReader();
+  r.onload=e=>{document.getElementById(previewImgId).src=e.target.result;document.getElementById(previewId).style.display='block';document.getElementById(btnId).disabled=false;};
+  r.readAsDataURL(file);
+}
+setupUpload('bdInput','bdZone','bdPreview','bdPreviewImg','bdBtn');
+setupUpload('biasInput','biasZone','biasPreview','biasPreviewImg','biasBtn');
+
+function fillPanel(lId,cId,bId,data,color){
+  document.getElementById(lId).textContent='Digit '+data.label;
+  document.getElementById(cId).textContent='Confidence: '+data.conf+'%';
+  const el=document.getElementById(bId);el.innerHTML='';
+  data.top5.forEach(([lbl,val],i)=>{
+    const row=document.createElement('div');row.className='conf-bar-row';
+    row.innerHTML=`<span class="conf-bar-label">${lbl}</span><div class="conf-bar-track"><div class="conf-bar-fill ${i===0?color:'muted'}" style="width:${val}%"></div></div><span class="conf-bar-val">${val}%</span>`;
+    el.appendChild(row);
+  });
+}
+
+function setVerdict(bId,iId,tId,success,okMsg,partMsg){
+  const b=document.getElementById(bId);
+  b.className='verdict '+(success?'success':'partial');
+  document.getElementById(iId).textContent=success?'✓':'⚠';
+  document.getElementById(tId).textContent=success?okMsg:partMsg;
+}
+
+async function analyzeBackdoor(){
+  const file=document.getElementById('bdInput').files[0];if(!file)return;
+  document.getElementById('bdResults').style.display='none';
+  document.getElementById('bdLoading').style.display='block';
+  document.getElementById('bdBtn').disabled=true;
+  const fd=new FormData();fd.append('image',file);
+  try{
+    const r=await fetch('/api/analyze/backdoor',{method:'POST',body:fd});const d=await r.json();
+    document.getElementById('bdCleanImg').src='data:image/png;base64,'+d.clean_img;
+    document.getElementById('bdTrigImg').src='data:image/png;base64,'+d.trigger_img;
+    setVerdict('bdVerdict','bdVerdictIcon','bdVerdictText',d.attack_neutralized,
+      'Attack neutralized — Ferrari successfully unlearned the backdoor trigger',
+      'Partial unlearning — backdoor sensitivity reduced but not fully eliminated');
+    fillPanel('bd_b_cl','bd_b_cl_c','bd_b_cl_b',d.baseline.clean,'red');
+    fillPanel('bd_b_tr','bd_b_tr_c','bd_b_tr_b',d.baseline.trigger,'red');
+    fillPanel('bd_u_cl','bd_u_cl_c','bd_u_cl_b',d.unlearned.clean,'green');
+    fillPanel('bd_u_tr','bd_u_tr_c','bd_u_tr_b',d.unlearned.trigger,'green');
+    document.getElementById('bdLoading').style.display='none';
+    document.getElementById('bdResults').style.display='block';
+  }catch(e){document.getElementById('bdLoading').style.display='none';alert('Error: '+e.message);}
+  document.getElementById('bdBtn').disabled=false;
+}
+
+async function analyzeBias(){
+  const file=document.getElementById('biasInput').files[0];if(!file)return;
+  document.getElementById('biasResults').style.display='none';
+  document.getElementById('biasLoading').style.display='block';
+  document.getElementById('biasBtn').disabled=true;
+  const fd=new FormData();fd.append('image',file);
+  try{
+    const r=await fetch('/api/analyze/bias',{method:'POST',body:fd});const d=await r.json();
+    document.getElementById('biasCorrectImg').src='data:image/png;base64,'+d.correct_img;
+    document.getElementById('biasSwappedImg').src='data:image/png;base64,'+d.swapped_img;
+    setVerdict('biasVerdict','biasVerdictIcon','biasVerdictText',d.bias_removed,
+      'Bias removed — Ferrari restored shape-based classification',
+      'Partial unlearning — color bias reduced but not fully eliminated');
+    fillPanel('bi_b_co','bi_b_co_c','bi_b_co_b',d.baseline.correct,'red');
+    fillPanel('bi_b_sw','bi_b_sw_c','bi_b_sw_b',d.baseline.swapped,'red');
+    fillPanel('bi_u_co','bi_u_co_c','bi_u_co_b',d.unlearned.correct,'green');
+    fillPanel('bi_u_sw','bi_u_sw_c','bi_u_sw_b',d.unlearned.swapped,'green');
+    document.getElementById('biasLoading').style.display='none';
+    document.getElementById('biasResults').style.display='block';
+  }catch(e){document.getElementById('biasLoading').style.display='none';alert('Error: '+e.message);}
+  document.getElementById('biasBtn').disabled=false;
+}
+
+async function analyzeSensitive(){
+  document.getElementById('sensResults').style.display='none';
+  document.getElementById('sensLoading').style.display='block';
+  document.getElementById('sensBtn').disabled=true;
+
+  const record = {
+    pregnancies: parseFloat(document.getElementById('s_preg').value),
+    glucose:     parseFloat(document.getElementById('s_gluc').value),
+    blood_pressure: parseFloat(document.getElementById('s_bp').value),
+    skin_thickness: parseFloat(document.getElementById('s_skin').value),
+    insulin:     parseFloat(document.getElementById('s_ins').value),
+    bmi:         parseFloat(document.getElementById('s_bmi').value),
+    dpf:         parseFloat(document.getElementById('s_dpf').value),
+    age:         parseFloat(document.getElementById('s_age').value),
+  };
+
+  try{
+    const r=await fetch('/api/analyze/sensitive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(record)});
+    const d=await r.json();
+
+    setVerdict('sensVerdict','sensVerdictIcon','sensVerdictText',d.feature_unlearned,
+      'Sensitive feature unlearned — model prediction is insensitive to Pregnancies perturbation',
+      'Partial unlearning — model still shows some sensitivity to the Pregnancies feature');
+
+    const DIAB_CLASSES = ['No Diabetes','Diabetes'];
+    fillPanelSens('se_b_or','se_b_or_c','se_b_or_b', d.baseline.original,  'red',   DIAB_CLASSES);
+    fillPanelSens('se_b_pe','se_b_pe_c','se_b_pe_b', d.baseline.perturbed, 'red',   DIAB_CLASSES);
+    fillPanelSens('se_u_or','se_u_or_c','se_u_or_b', d.unlearned.original, 'green', DIAB_CLASSES);
+    fillPanelSens('se_u_pe','se_u_pe_c','se_u_pe_b', d.unlearned.perturbed,'green', DIAB_CLASSES);
+
+    document.getElementById('sensLoading').style.display='none';
+    document.getElementById('sensResults').style.display='block';
+  }catch(e){document.getElementById('sensLoading').style.display='none';alert('Error: '+e.message);}
+  document.getElementById('sensBtn').disabled=false;
+}
+
+function fillPanelSens(lId,cId,bId,data,color,classNames){
+  document.getElementById(lId).textContent=data.label;
+  document.getElementById(cId).textContent='Confidence: '+data.conf+'%';
+  const el=document.getElementById(bId);el.innerHTML='';
+  data.top2.forEach(([lbl,val],i)=>{
+    const row=document.createElement('div');row.className='conf-bar-row';
+    row.innerHTML=`<span class="conf-bar-label" style="width:80px;font-size:.58rem;">${lbl}</span><div class="conf-bar-track"><div class="conf-bar-fill ${i===0?color:'muted'}" style="width:${val}%"></div></div><span class="conf-bar-val">${val}%</span>`;
+    el.appendChild(row);
+  });
+}
+
+const PATIENT_PRESETS = {
+  '1': { preg:6,  gluc:148, bp:72, skin:35, ins:0,   bmi:33.6, dpf:0.627, age:50 },
+  '2': { preg:9,  gluc:170, bp:74, skin:31, ins:0,   bmi:44.0, dpf:0.403, age:43 },
+  '3': { preg:7,  gluc:100, bp:0,  skin:0,  ins:0,   bmi:30.0, dpf:0.484, age:32 },
+};
+
+function loadPreset() {
+  const key = document.getElementById('patientPreset').value;
+  if (!key) return;
+  const p = PATIENT_PRESETS[key];
+  document.getElementById('s_preg').value = p.preg;
+  document.getElementById('s_gluc').value = p.gluc;
+  document.getElementById('s_bp').value   = p.bp;
+  document.getElementById('s_skin').value = p.skin;
+  document.getElementById('s_ins').value  = p.ins;
+  document.getElementById('s_bmi').value  = p.bmi;
+  document.getElementById('s_dpf').value  = p.dpf;
+  document.getElementById('s_age').value  = p.age;
+}
+</script>
+</body>
+</html>

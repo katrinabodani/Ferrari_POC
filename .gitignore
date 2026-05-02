@@ -1,0 +1,23 @@
+# Directories (Trailing slashes for clarity)
+/bias_demo/
+/coloured_mnist/
+/data/
+/demo_candidates/
+/experiments/
+/ferrari_env/
+
+# Weights and Large Files
+*.pth
+*.npy
+*.log
+*.pyc
+
+# Scripts (Ensure you definitely don't want these in the repo)
+find_demo_images.py
+find_demo_images_b.py
+find_sensitive_demo.py
+
+# Python environment/cache (Commonly missed)
+/__pycache__/
+*.py[cod]
+.env
