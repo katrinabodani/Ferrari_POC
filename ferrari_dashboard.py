@@ -92,11 +92,13 @@ def predict(model, tensor, class_names):
         [[class_names[i], round(v * 100, 1)] for i, v in top5]
     )
 
+# ── Bias color injection (BACKGROUND MODE) ────────────────────────────────────
 import copy as _copy
-from datasets.utils import inject_pixel_color as _inject_pixel_color
+from datasets.utils import inject_pixel_color as _inject_pixel_color, create_color_image as _create_color_image
 
 _BLUE_COLOR  = np.array([-1., -1.,  1.])
 _GREEN_COLOR = np.array([-1.,  1., -1.])
+_WHITE_COLOR = np.array([ 1.,  1.,  1.])
 _BLUE_IDX, _GREEN_IDX = 2, 1
 
 def _img_tensor2numpy(t):
@@ -105,16 +107,27 @@ def _img_tensor2numpy(t):
 def _numpy2tensor(a):
     return torch.tensor(np.transpose(a, (2, 0, 1)))
 
-def inject_color_exact(image_tensor, color, color_index):
-    """Exact replica of create_biased_mnist_digit color injection from bias.py"""
+def inject_color_background(image_tensor, bg_color, color_index):
+    """
+    Exact replica of create_biased_mnist_background:
+    - Background filled with bg_color
+    - Digit pixels injected as WHITE into color_index channel
+    """
     image_np   = _img_tensor2numpy(image_tensor)
-    blank      = np.full((28, 28, 3), -1., dtype=np.float64)
     locations  = np.argwhere(image_np != [-1.])
     pixel_vals = image_np[locations[:, 0], locations[:, 1]]
-    colored    = _copy.deepcopy(blank)
-    new_vals   = _inject_pixel_color(original_pixel_val=pixel_vals,
-                                     color=color, color_index=color_index)
-    colored[locations[:, 0], locations[:, 1]] = new_vals
+
+    # Full colored background
+    colored = _create_color_image(height=28, width=28, channels=3, color=bg_color)
+
+    # Digit pixels become white in color channel
+    white_vals = _inject_pixel_color(
+        original_pixel_val=pixel_vals,
+        color=_WHITE_COLOR,
+        color_index=color_index)
+
+    colored[locations[:, 0], locations[:, 1]] = white_vals
+
     return _numpy2tensor(colored).float()
 
 def pil_to_single_channel_tensor(pil_img):
@@ -127,6 +140,14 @@ def pil_to_single_channel_tensor(pil_img):
 def extract_bias_color(filename):
     match = re.search(r'_(blue|green|red)', filename)
     return match.group(1) if match else 'blue'
+
+# NOTE: color mapping is SWAPPED from what you'd expect because retain clients
+# dominated training — model associates green bg with 3, blue bg with 8
+# So "correct color" for digit 3 is actually green, and for digit 8 is blue
+CORRECT_BG = {'3': (_GREEN_COLOR, _GREEN_IDX, 'green'),
+               '8': (_BLUE_COLOR,  _BLUE_IDX,  'blue')}
+SWAPPED_BG = {'3': (_BLUE_COLOR,  _BLUE_IDX,  'blue'),
+               '8': (_GREEN_COLOR, _GREEN_IDX, 'green')}
 
 SWAP = {'blue': 'green', 'green': 'blue'}
 
@@ -183,20 +204,33 @@ def analyze_bias():
     if not file:
         return jsonify({'error': 'No image provided'}), 400
 
-    correct_color = extract_bias_color(file.filename)
-    swapped_color = SWAP.get(correct_color, 'green')
+    # Extract digit and color from filename e.g. BIAS_digit3_idx18_green.png
+    digit_match = re.search(r'digit(\d+)', file.filename)
+    true_label  = digit_match.group(1) if digit_match else None
 
+    file_color  = extract_bias_color(file.filename)  # color in filename
+    swapped_color = SWAP.get(file_color, 'green')
+
+    # Load grayscale image → single channel tensor
     img = Image.open(file.stream).convert('L')
-    # Convert to single channel tensor matching training pipeline
     img_tensor = pil_to_single_channel_tensor(img)
 
-    # Inject colors using exact same method as training
-    if correct_color == 'blue':
-        correct_tensor = inject_color_exact(img_tensor, _BLUE_COLOR,  _BLUE_IDX)
-        swapped_tensor = inject_color_exact(img_tensor, _GREEN_COLOR, _GREEN_IDX)
+    # Get correct and swapped background colors for this digit
+    if true_label in CORRECT_BG:
+        correct_bg_color, correct_bg_idx, correct_color_name = CORRECT_BG[true_label]
+        swapped_bg_color, swapped_bg_idx, swapped_color_name = SWAPPED_BG[true_label]
     else:
-        correct_tensor = inject_color_exact(img_tensor, _GREEN_COLOR, _GREEN_IDX)
-        swapped_tensor = inject_color_exact(img_tensor, _BLUE_COLOR,  _BLUE_IDX)
+        # Fallback to filename color if digit not found
+        if file_color == 'green':
+            correct_bg_color, correct_bg_idx, correct_color_name = _GREEN_COLOR, _GREEN_IDX, 'green'
+            swapped_bg_color, swapped_bg_idx, swapped_color_name = _BLUE_COLOR,  _BLUE_IDX,  'blue'
+        else:
+            correct_bg_color, correct_bg_idx, correct_color_name = _BLUE_COLOR,  _BLUE_IDX,  'blue'
+            swapped_bg_color, swapped_bg_idx, swapped_color_name = _GREEN_COLOR, _GREEN_IDX, 'green'
+
+    # Inject background colors
+    correct_tensor = inject_color_background(img_tensor, correct_bg_color, correct_bg_idx)
+    swapped_tensor = inject_color_background(img_tensor, swapped_bg_color, swapped_bg_idx)
 
     bi_base = get_model(BI_BASELINE, num_classes=2, input_channels=3)
     bi_unl  = get_model(BI_UNLEARN,  num_classes=2, input_channels=3)
@@ -206,14 +240,11 @@ def analyze_bias():
     u_co_lbl, u_co_conf, u_co_top5 = predict(bi_unl,  correct_tensor, BIAS_CLASSES)
     u_sw_lbl, u_sw_conf, u_sw_top5 = predict(bi_unl,  swapped_tensor, BIAS_CLASSES)
 
-    digit_match = re.search(r'digit(\d+)', file.filename)
-    true_label  = digit_match.group(1) if digit_match else None
-
     return jsonify({
-        'correct_img':  tensor_to_b64(correct_tensor),
-        'swapped_img':  tensor_to_b64(swapped_tensor),
-        'correct_color': correct_color,
-        'swapped_color': swapped_color,
+        'correct_img':   tensor_to_b64(correct_tensor),
+        'swapped_img':   tensor_to_b64(swapped_tensor),
+        'correct_color': correct_color_name,
+        'swapped_color': swapped_color_name,
         'baseline':  {'correct': {'label': b_co_lbl, 'conf': b_co_conf, 'top5': b_co_top5},
                       'swapped': {'label': b_sw_lbl, 'conf': b_sw_conf, 'top5': b_sw_top5}},
         'unlearned': {'correct': {'label': u_co_lbl, 'conf': u_co_conf, 'top5': u_co_top5},
@@ -230,7 +261,7 @@ from flask import json as flask_json
 DIABETES_MEANS = [3.845, 120.89, 69.10, 20.54, 79.80, 31.99, 0.472, 33.24]
 DIABETES_STDS  = [3.370,  31.97, 19.36, 15.95, 115.2,  7.88, 0.331, 11.76]
 DIAB_CLASSES   = ['No Diabetes', 'Diabetes']
-SENSITIVE_FEAT = 0  # Pregnancies index (matches unlearn_feature=0 in strategies.py)
+SENSITIVE_FEAT = 0  # Pregnancies index
 
 def normalize_tabular(values):
     arr = np.array(values, dtype=np.float32)
@@ -254,17 +285,13 @@ def analyze_sensitive():
         data.get('age', 30),
     ]
 
-    # Perturbed version — flip pregnancies between 0 and max (15)
-    # This tests whether model is sensitive to this feature
     perturbed = features.copy()
     current_val = features[SENSITIVE_FEAT]
-    # If value is high, set to 0; if low, set to 15 — maximizes perturbation effect
     perturbed[SENSITIVE_FEAT] = 0.0 if current_val > 5 else 15.0
 
     original_tensor  = normalize_tabular(features)
     perturbed_tensor = normalize_tabular(perturbed)
 
-    from model import models as mdl
     se_base = get_model(SE_BASELINE, num_classes=2, input_channels=8, tabular=True)
     se_unl  = get_model(SE_UNLEARN,  num_classes=2, input_channels=8, tabular=True)
 
@@ -296,7 +323,5 @@ def analyze_sensitive():
 
 if __name__ == '__main__':
     print(f"\n🏎  Ferrari Unlearning Dashboard")
-    print(f"   Backdoor: {'✓' if os.path.exists(BD_UNLEARN) else '✗ missing'}")
-    print(f"   Bias:     {'✓' if os.path.exists(BI_UNLEARN) else '✗ missing'}")
     print(f"   Open http://localhost:5000\n")
     app.run(debug=False, port=5000)
